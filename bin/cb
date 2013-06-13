@@ -55,6 +55,12 @@ def urlopen(url, data=None, auth=None, headers=None):
 get = post = urlopen
 
 
+def error(line):
+    sys.stderr.write(line)
+    sys.stderr.write('\n')
+    sys.stderr.flush()
+
+
 class CommandNotFound(Exception):
     pass
 
@@ -74,11 +80,11 @@ class Commander(object):
         return wrapper
 
     def help(self):
-        print 'usage: cb [command]'
-        print 'The available commands are:'
+        error('usage: cb [command]')
+        error('The available commands are:')
         for key in sorted(self.function_map):
             func = self.function_map[key]
-            print '    %s %s' % (' '.join(key).ljust(20), func.func_doc)
+            error('    %s %s' % (' '.join(key).ljust(20), func.func_doc))
 
     def run_command(self, command_args):
         command_found = False
@@ -116,7 +122,7 @@ def get_ticket_number():
     try:
         return re.match('^(?:ticket-)?([0-9]+)', branch_name).groups()[0]
     except AttributeError:
-        print 'Could not retrieve ticket number from branch name "%s".' % branch_name
+        error('Could not retrieve ticket number from branch name "%s".' % branch_name)
 
 
 @commander.command('status')
@@ -265,11 +271,11 @@ def comments_update(message=None):
             headers={'content-type': 'application/xml'},
         )
     else:
-        print 'Aborting due to empty update message'
+        error('Aborting due to empty update message')
 
 
 if __name__ == "__main__":
     try:
         commander.run_command(sys.argv)
     except CommandNotFound:
-        print 'Command not found'
+        error('Command not found')
