@@ -2,9 +2,10 @@
 import sys
 import ConfigParser
 import re
-import requests
+import urllib2
 import tempfile
 import os
+import sys
 import json
 import functools
 import collections
@@ -18,6 +19,8 @@ from git.repo.base import Repo
 config = ConfigParser.SafeConfigParser()
 config.read('.cbconfig')
 
+_user_agent = 'codebase-cli/dev'
+_auth_realm = 'Application'
 AUTH_USERNAME = config.get('auth', 'username')
 AUTH_TOKEN = config.get('auth', 'token')
 AUTH_CREDENTIALS = (AUTH_USERNAME, AUTH_TOKEN,)
@@ -27,6 +30,29 @@ PROJECT_NAME = config.get('project', 'name')
 API_URL = 'https://api3.codebasehq.com/%s/' % PROJECT_NAME
 
 EDITOR = os.environ.get('EDITOR', 'vim')
+
+
+def urlopen(url, data=None, auth=None, headers=None):
+    """Requests-like wrapper to GET/POST an URL."""
+    headers = headers or {}
+    headers.setdefault('User-Agent', _user_agent)
+
+    opener = urllib2.build_opener()
+    if auth:
+        user, password = auth
+        realm = _auth_realm
+        handler = urllib2.HTTPBasicAuthHandler()
+        handler.add_password(realm=realm, uri=url, user=user, passwd=password)
+        opener.add_handler(handler)
+
+    request = urllib2.Request(url)
+    for key, value in headers.items():
+        request.add_header(key, value)
+
+    return opener.open(request, data=data)
+
+
+get = post = urlopen
 
 
 class CommandNotFound(Exception):
@@ -79,8 +105,8 @@ class Commander(object):
 commander = Commander()
 
 
-authed_get = functools.partial(requests.get, auth=AUTH_CREDENTIALS)
-authed_post = functools.partial(requests.post, auth=AUTH_CREDENTIALS)
+authed_get = functools.partial(get, auth=AUTH_CREDENTIALS)
+authed_post = functools.partial(post, auth=AUTH_CREDENTIALS)
 
 
 def get_ticket_number():
@@ -102,7 +128,7 @@ def status(ticket_number=None):
         ticket_no = ticket_number
 
     res = authed_get('%stickets/%s.json' % (API_URL, ticket_no))
-    content = json.loads(res.content)
+    content = json.load(res)
 
     print content['ticket']['status']['name']
 
@@ -115,7 +141,7 @@ def status_update(new_status=None):
     invalid = False
 
     res = authed_get('%stickets/statuses.json' % API_URL)
-    statuses = json.loads(res.content)
+    statuses = json.load(res)
     ids = {i: status['ticketing_status']['id'] for i, status in enumerate(statuses, 1)}
 
     if not new_status:
@@ -147,14 +173,14 @@ def status_update(new_status=None):
 def statuses():
     '''Gets the available statuses for a ticket.'''
     res = authed_get('%stickets/statuses.json' % API_URL)
-    statuses = json.loads(res.content)
+    statuses = json.load(res)
     for i, status in enumerate(statuses, 1):
         print '%d: %s' % (i, status['ticketing_status']['name'])
 
 
 def get_user_details():
     res = authed_get('%sassignments.json' % API_URL)
-    users = json.loads(res.content)
+    users = json.load(res)
     user_details = {}
     for user in users:
         user = user['user']
@@ -174,7 +200,7 @@ def assigned():
 
     user_details = get_user_details()
     res = authed_get('%stickets/%s.json' % (API_URL, ticket_no))
-    content = json.loads(res.content)
+    content = json.load(res)
     assignee_id = content['ticket']['assignee_id']
     assignee_details = user_details[assignee_id]
     print '%s %s' % (assignee_details['first_name'], assignee_details['last_name'])
@@ -192,7 +218,7 @@ def comments():
     '''Gets a log of the comments.'''
     ticket_no = get_ticket_number()
     res = authed_get('%stickets/%s/notes.json' % (API_URL, ticket_no))
-    content = json.loads(res.content)
+    content = json.load(res)
     user_details = get_user_details()
     for comment in content:
         comment = comment['ticket_note']
@@ -247,5 +273,3 @@ if __name__ == "__main__":
         commander.run_command(sys.argv)
     except CommandNotFound:
         print 'Command not found'
-    except TypeError:
-        print 'Incorrect number of arguments'
